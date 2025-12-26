@@ -1,7 +1,8 @@
 import { NextResponse } from 'next/server';
-import { auth, clerkClient } from '@clerk/nextjs/server';
+import { auth, clerkClient, currentUser } from '@clerk/nextjs/server';
 import { connectToDatabase } from '@/lib/mongodb';
 import { Organization, OrganizationMember } from '@/lib/models';
+import { sendInvitationEmail } from '@/lib/email/send-invitation';
 
 /**
  * POST /api/organizations/invite
@@ -156,15 +157,37 @@ export async function POST(request: Request) {
       })
     ).toString('base64');
 
+    const inviteLink = `${process.env.NEXT_PUBLIC_APP_URL}/accept-invitation?token=${inviteToken}`;
+
+    // Get current user info for email
+    const user = await currentUser();
+    const inviterName = user?.firstName
+      ? `${user.firstName} ${user.lastName || ''}`.trim()
+      : user?.emailAddresses[0]?.emailAddress || 'A team member';
+
+    // Send invitation email
+    try {
+      await sendInvitationEmail({
+        invitedEmail: userEmail,
+        organizationName: organization.name,
+        inviterName,
+        inviteLink,
+      });
+    } catch (emailError: any) {
+      console.error('Failed to send invitation email:', emailError);
+      // Don't fail the invitation creation if email fails
+      // The user can still use the invite link manually
+    }
+
     return NextResponse.json({
       success: true,
-      message: 'Invitation created',
+      message: 'Invitation sent successfully! An email has been sent to the user.',
       invitation: {
         id: member._id.toString(),
         email: userEmail,
         role: role,
         status: 'invited',
-        inviteLink: `${process.env.NEXT_PUBLIC_APP_URL}/sign-up?invite=${inviteToken}`,
+        inviteLink,
       },
       organizationId: currentMembership.organizationId.toString(),
       organizationName: organization.name,

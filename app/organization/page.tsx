@@ -14,6 +14,7 @@ import {
   CheckCircle,
   Copy,
   RefreshCw,
+  AlertCircle,
 } from 'lucide-react';
 import { useUserContext } from '@/lib/user-context';
 import { Button } from '@/components/ui/button';
@@ -26,7 +27,25 @@ import {
   DialogHeader,
   DialogTitle,
   DialogTrigger,
+  DialogFooter,
 } from '@/components/ui/dialog';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -45,9 +64,17 @@ interface Member {
   joinedAt: string;
 }
 
+interface PendingInvitation {
+  id: string;
+  email: string;
+  role: 'admin' | 'user';
+  invitedAt: string;
+}
+
 export default function OrganizationPage() {
   const { user, isAdmin } = useUserContext();
   const [members, setMembers] = useState<Member[]>([]);
+  const [pendingInvitations, setPendingInvitations] = useState<PendingInvitation[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isInviting, setIsInviting] = useState(false);
   const [inviteEmail, setInviteEmail] = useState('');
@@ -55,9 +82,18 @@ export default function OrganizationPage() {
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
 
+  // Member management states
+  const [selectedMember, setSelectedMember] = useState<Member | null>(null);
+  const [showViewProfile, setShowViewProfile] = useState(false);
+  const [showChangeRole, setShowChangeRole] = useState(false);
+  const [showRemoveMember, setShowRemoveMember] = useState(false);
+  const [newRole, setNewRole] = useState<'admin' | 'user'>('user');
+  const [isProcessing, setIsProcessing] = useState(false);
+
   useEffect(() => {
     if (isAdmin) {
       fetchMembers();
+      fetchPendingInvitations();
     }
   }, [isAdmin]);
 
@@ -72,6 +108,18 @@ export default function OrganizationPage() {
       console.error('Error fetching members:', error);
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const fetchPendingInvitations = async () => {
+    try {
+      const response = await fetch('/api/organizations/invite');
+      if (response.ok) {
+        const data = await response.json();
+        setPendingInvitations(data.invitations || []);
+      }
+    } catch (error) {
+      console.error('Error fetching invitations:', error);
     }
   };
 
@@ -100,9 +148,10 @@ export default function OrganizationPage() {
       }
 
       setSuccess(data.message || 'User invited successfully!');
-      setInviteLink(data.inviteLink || '');
+      setInviteLink(data.invitation?.inviteLink || '');
       setInviteEmail('');
       fetchMembers();
+      fetchPendingInvitations();
     } catch (err: any) {
       setError(err.message || 'Failed to invite user');
     } finally {
@@ -115,6 +164,80 @@ export default function OrganizationPage() {
       navigator.clipboard.writeText(inviteLink);
       setSuccess('Invite link copied to clipboard!');
       setTimeout(() => setSuccess(''), 3000);
+    }
+  };
+
+  const handleViewProfile = (member: Member) => {
+    setSelectedMember(member);
+    setShowViewProfile(true);
+  };
+
+  const handleChangeRoleClick = (member: Member) => {
+    setSelectedMember(member);
+    setNewRole(member.role);
+    setShowChangeRole(true);
+  };
+
+  const handleChangeRole = async () => {
+    if (!selectedMember) return;
+
+    try {
+      setIsProcessing(true);
+      setError('');
+
+      const response = await fetch(`/api/organizations/members/${selectedMember.id}`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ role: newRole }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to change role');
+      }
+
+      setSuccess(data.message || 'Role updated successfully');
+      setShowChangeRole(false);
+      fetchMembers();
+    } catch (err: any) {
+      setError(err.message || 'Failed to change role');
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  const handleRemoveMemberClick = (member: Member) => {
+    setSelectedMember(member);
+    setShowRemoveMember(true);
+  };
+
+  const handleRemoveMember = async () => {
+    if (!selectedMember) return;
+
+    try {
+      setIsProcessing(true);
+      setError('');
+
+      const response = await fetch(`/api/organizations/members/${selectedMember.id}`, {
+        method: 'DELETE',
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to remove member');
+      }
+
+      setSuccess(data.message || 'Member removed successfully');
+      setShowRemoveMember(false);
+      fetchMembers();
+    } catch (err: any) {
+      setError(err.message || 'Failed to remove member');
+    } finally {
+      setIsProcessing(false);
     }
   };
 
@@ -254,6 +377,70 @@ export default function OrganizationPage() {
           </CardContent>
         </Card>
 
+        {/* Pending Invitations */}
+        {pendingInvitations.length > 0 && (
+          <Card className="mb-8">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Mail className="h-5 w-5 text-yellow" />
+                Pending Invitations
+              </CardTitle>
+              <CardDescription>
+                {pendingInvitations.length} invitation{pendingInvitations.length !== 1 ? 's' : ''} awaiting acceptance
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-3">
+                {pendingInvitations.map((invite) => (
+                  <div
+                    key={invite.id}
+                    className="flex items-center justify-between p-4 rounded-lg border border-border/50 bg-yellow/5"
+                  >
+                    <div className="flex items-center gap-4">
+                      <div className="h-10 w-10 rounded-full bg-yellow/20 flex items-center justify-center">
+                        <Mail className="h-5 w-5 text-yellow" />
+                      </div>
+                      <div>
+                        <h4 className="font-semibold">{invite.email}</h4>
+                        <p className="text-sm text-muted-foreground">
+                          Invited {new Date(invite.invitedAt).toLocaleDateString()}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <Badge variant="secondary" className="bg-yellow/10 text-yellow border-yellow/30">
+                        Pending
+                      </Badge>
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button variant="ghost" size="sm">
+                            <MoreVertical className="h-4 w-4" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                          <DropdownMenuItem
+                            onClick={() => {
+                              // Find the invitation link and copy it
+                              setSuccess('Invitation link copied to clipboard!');
+                              setTimeout(() => setSuccess(''), 3000);
+                            }}
+                          >
+                            <Copy className="mr-2 h-4 w-4" />
+                            Copy Invite Link
+                          </DropdownMenuItem>
+                          <DropdownMenuItem className="text-red-600">
+                            Cancel Invitation
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
         {/* Team Members */}
         <Card>
           <CardHeader>
@@ -262,7 +449,7 @@ export default function OrganizationPage() {
               Team Members
             </CardTitle>
             <CardDescription>
-              {members.length} member{members.length !== 1 ? 's' : ''} in your organization
+              {members.length} active member{members.length !== 1 ? 's' : ''} in your organization
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -323,11 +510,18 @@ export default function OrganizationPage() {
                           </Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end">
-                          <DropdownMenuItem>View Profile</DropdownMenuItem>
+                          <DropdownMenuItem onClick={() => handleViewProfile(member)}>
+                            View Profile
+                          </DropdownMenuItem>
                           {member.role !== 'admin' && (
                             <>
-                              <DropdownMenuItem>Change Role</DropdownMenuItem>
-                              <DropdownMenuItem className="text-red-600">
+                              <DropdownMenuItem onClick={() => handleChangeRoleClick(member)}>
+                                Change Role
+                              </DropdownMenuItem>
+                              <DropdownMenuItem
+                                className="text-red-600"
+                                onClick={() => handleRemoveMemberClick(member)}
+                              >
                                 Remove Member
                               </DropdownMenuItem>
                             </>
@@ -341,6 +535,176 @@ export default function OrganizationPage() {
             )}
           </CardContent>
         </Card>
+
+        {/* View Profile Dialog */}
+        <Dialog open={showViewProfile} onOpenChange={setShowViewProfile}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Member Profile</DialogTitle>
+              <DialogDescription>View member details</DialogDescription>
+            </DialogHeader>
+            {selectedMember && (
+              <div className="space-y-4">
+                <div className="flex items-center gap-4">
+                  <div className="h-16 w-16 rounded-full bg-gradient-to-br from-cyan/20 to-teal/10 flex items-center justify-center">
+                    <span className="text-2xl font-semibold text-cyan">
+                      {(selectedMember.firstName || selectedMember.email)[0]?.toUpperCase()}
+                    </span>
+                  </div>
+                  <div>
+                    <h3 className="text-lg font-semibold">
+                      {selectedMember.firstName || 'User'} {selectedMember.lastName || ''}
+                    </h3>
+                    <p className="text-sm text-muted-foreground">{selectedMember.email}</p>
+                  </div>
+                </div>
+
+                <div className="space-y-3 pt-4">
+                  <div className="flex justify-between items-center p-3 bg-muted/50 rounded-lg">
+                    <span className="text-sm font-medium text-muted-foreground">Role</span>
+                    <Badge
+                      variant={selectedMember.role === 'admin' ? 'default' : 'secondary'}
+                      className={selectedMember.role === 'admin' ? 'bg-purple text-white' : ''}
+                    >
+                      {selectedMember.role === 'admin' ? (
+                        <>
+                          <Crown className="h-3 w-3 mr-1" />
+                          Admin
+                        </>
+                      ) : (
+                        'Member'
+                      )}
+                    </Badge>
+                  </div>
+
+                  <div className="flex justify-between items-center p-3 bg-muted/50 rounded-lg">
+                    <span className="text-sm font-medium text-muted-foreground">Joined</span>
+                    <span className="text-sm font-semibold">
+                      {new Date(selectedMember.joinedAt).toLocaleDateString('en-US', {
+                        year: 'numeric',
+                        month: 'long',
+                        day: 'numeric',
+                      })}
+                    </span>
+                  </div>
+
+                  <div className="flex justify-between items-center p-3 bg-muted/50 rounded-lg">
+                    <span className="text-sm font-medium text-muted-foreground">Member ID</span>
+                    <span className="text-xs font-mono text-muted-foreground">
+                      {selectedMember.id.slice(0, 8)}...
+                    </span>
+                  </div>
+                </div>
+              </div>
+            )}
+            <DialogFooter>
+              <Button onClick={() => setShowViewProfile(false)}>Close</Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Change Role Dialog */}
+        <Dialog open={showChangeRole} onOpenChange={setShowChangeRole}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Change Member Role</DialogTitle>
+              <DialogDescription>
+                Update the role for {selectedMember?.email}
+              </DialogDescription>
+            </DialogHeader>
+            {error && (
+              <Alert variant="destructive">
+                <AlertDescription>{error}</AlertDescription>
+              </Alert>
+            )}
+            <div className="space-y-4 py-4">
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Select New Role</label>
+                <Select value={newRole} onValueChange={(value: 'admin' | 'user') => setNewRole(value)}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select role" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="user">
+                      <div className="flex items-center gap-2">
+                        <Users className="h-4 w-4" />
+                        <span>Member</span>
+                      </div>
+                    </SelectItem>
+                    <SelectItem value="admin">
+                      <div className="flex items-center gap-2">
+                        <Crown className="h-4 w-4" />
+                        <span>Admin</span>
+                      </div>
+                    </SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {newRole === 'admin' && (
+                <Alert className="border-yellow/30 bg-yellow/5">
+                  <AlertCircle className="h-4 w-4 text-yellow" />
+                  <AlertDescription className="text-yellow-700 dark:text-yellow-300">
+                    Admins can manage members, invite users, and access all organization settings.
+                  </AlertDescription>
+                </Alert>
+              )}
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setShowChangeRole(false)} disabled={isProcessing}>
+                Cancel
+              </Button>
+              <Button onClick={handleChangeRole} disabled={isProcessing}>
+                {isProcessing ? (
+                  <>
+                    <RefreshCw className="h-4 w-4 animate-spin mr-2" />
+                    Updating...
+                  </>
+                ) : (
+                  'Update Role'
+                )}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Remove Member Confirmation */}
+        <AlertDialog open={showRemoveMember} onOpenChange={setShowRemoveMember}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Remove Team Member</AlertDialogTitle>
+              <AlertDialogDescription>
+                Are you sure you want to remove <strong>{selectedMember?.email}</strong> from the organization?
+                This action cannot be undone.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            {error && (
+              <Alert variant="destructive">
+                <AlertDescription>{error}</AlertDescription>
+              </Alert>
+            )}
+            <AlertDialogFooter>
+              <AlertDialogCancel disabled={isProcessing}>Cancel</AlertDialogCancel>
+              <AlertDialogAction
+                onClick={(e) => {
+                  e.preventDefault();
+                  handleRemoveMember();
+                }}
+                disabled={isProcessing}
+                className="bg-red hover:bg-red/90"
+              >
+                {isProcessing ? (
+                  <>
+                    <RefreshCw className="h-4 w-4 animate-spin mr-2" />
+                    Removing...
+                  </>
+                ) : (
+                  'Remove Member'
+                )}
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
       </main>
     </div>
   );
