@@ -6,6 +6,7 @@ import { Analytics } from "@vercel/analytics/next"
 import { ThemeProvider } from "@/components/theme-provider"
 import { TaskProvider } from "@/lib/task-store"
 import { UserProvider } from "@/lib/user-context"
+import { Toaster } from "sonner"
 import "./globals.css"
 
 const _inter = Inter({ subsets: ["latin"] })
@@ -31,6 +32,7 @@ export default function RootLayout({
               <UserProvider>{children}</UserProvider>
             </TaskProvider>
           </ThemeProvider>
+          <Toaster richColors position="top-right" />
           <Analytics />
         </body>
       </html>
