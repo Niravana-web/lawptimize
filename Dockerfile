@@ -1,7 +1,6 @@
-# Base image
-FROM node:20-slim AS base
+FROM node:20-slim
 
-# Install OpenSSL for Prisma and necessary libraries for Puppeteer/Chrome
+# Install OpenSSL and necessary libraries for Puppeteer/Chrome
 RUN apt-get update -y && apt-get install -y \
     openssl \
     libnss3 \
@@ -21,54 +20,29 @@ RUN apt-get update -y && apt-get install -y \
     libcairo2 \
     && rm -rf /var/lib/apt/lists/*
 
-# Install dependencies only when needed
-FROM base AS deps
 WORKDIR /app
 
 # Install dependencies based on the preferred package manager
 COPY package.json package-lock.json* ./
-RUN npm ci
+RUN npm install --legacy-peer-deps
 
-# Rebuild the source code only when needed
-FROM base AS builder
-WORKDIR /app
-COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 
-# Environment variables must be present at build time if they are used in getStaticProps/getServerSideProps
+# Hardcoded Environment Variables
 ENV NEXT_TELEMETRY_DISABLED 1
+ENV NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY="pk_test_Y29tcG9zZWQtbWFuLTg5LmNsZXJrLmFjY291bnRzLmRldiQ"
+ENV CLERK_SECRET_KEY="sk_test_xNP4RphH7oQ52ucmj9VZOEdiOtwbDP7Ife8s9vIvq8"
+ENV DATABASE_URL="mongodb+srv://Sheshu:Sheshu123@cluster0.3fpfvmc.mongodb.net/lawptimize"
+ENV DATABASE_SCHEMA="law"
+ENV RESEND_API_KEY="re_KYJTGnDY_DkixEdthBse447TNMc1trFje"
+ENV EMAIL_DOMAIN="niravana.in"
+ENV EMAIL_FROM_INVOICES="invoices@niravana.in"
+ENV EMAIL_FROM_NOREPLY="noreply@niravana.in"
+ENV NEXT_PUBLIC_APP_URL="http://localhost:3000"
 
-RUN npm run build
-
-# Production image, copy all the files and run next
-FROM base AS runner
-WORKDIR /app
-
-ENV NODE_ENV production
-ENV NEXT_TELEMETRY_DISABLED 1
-
-# Puppeteer env vars
-# Tell Puppeteer to skip downloading Chrome if we were using a system one, 
-# BUT here we are letting it download its matching version to ~/.cache/puppeteer
-# So we do NOT set PUPPETEER_SKIP_CHROMIUM_DOWNLOAD
-# Instead, we just ensure the dependencies are there (handled in base).
-
-RUN addgroup --system --gid 1001 nodejs
-RUN adduser --system --uid 1001 nextjs
-
-COPY --from=builder /app/public ./public
-
-# Automatically leverage output traces to reduce image size
-# https://nextjs.org/docs/advanced-features/output-file-tracing
-COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
-COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
-
-USER nextjs
-
-EXPOSE 3000
-
+# Networking
 ENV PORT 3000
 ENV HOSTNAME "0.0.0.0"
+EXPOSE 3000
 
-# Start the application
-CMD ["node", "server.js"]
+CMD ["npm", "run", "dev"]
