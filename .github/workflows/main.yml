@@ -5,10 +5,10 @@ on:
       branch:
         description: "Select the branch to run the workflow"
         required: true
-        default: "main"
+        default: "master"
         type: choice
         options:
-          - main
+          - master
 env:
   AWS_ACCOUNT_ID: 803664810774
   AWS_DEFAULT_REGION: us-east-1
