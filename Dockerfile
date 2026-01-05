@@ -39,7 +39,7 @@ ENV EMAIL_DOMAIN="niravana.in"
 ENV EMAIL_FROM_INVOICES="invoices@niravana.in"
 ENV EMAIL_FROM_NOREPLY="noreply@niravana.in"
 # ENV NEXT_PUBLIC_APP_URL="http://localhost:3000"
-ENV NEXT_PUBLIC_APP_URL="http://lawptimize.lipiq.in"
+ENV NEXT_PUBLIC_APP_URL="https://lawptimize.lipiq.in"
 # Networking
 ENV PORT 3000
 ENV HOSTNAME "0.0.0.0"
